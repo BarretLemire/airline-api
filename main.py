@@ -20,12 +20,12 @@ with open("airlines.json", "r") as f:
     airline_data = json.load(f)
 
 
-airline_names = [airline["name"] for airline in airline_data]
+airline_names = [airline for airline in airline_data]
 
 app = FastAPI()
 
 
-@app.get("/")
+@app.get("/airlines")
 async def get_airline_names() -> List[str]:
     return airline_names
 
@@ -48,7 +48,7 @@ async def get_flight(airline_name: str, flight_num: str) -> Flight:
     raise HTTPException(status_code=404, detail="Flight not found")
 
 
-@app.post("/{airline}")
+@app.post("/{airline_name}")
 async def new_airline(airline: Airline) -> List[str]:
     airline_names.append(airline.name)
     airline_data.append(airline.dict())
