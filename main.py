@@ -10,68 +10,88 @@
 #DELETE /:airline/:flight_num
 
 #"""
-import json
 from fastapi import FastAPI, HTTPException
-from typing import List, Dict
+from pydantic import BaseModel
+from typing import List, Optional
 from models import Airline, Flight
-
-
-with open("airlines.json", "r") as f:
-    airline_data = json.load(f)
-
-
-airline_names = [airline for airline in airline_data]
+import json
 
 app = FastAPI()
 
+from models import Airline, Flight
 
-@app.get("/airlines")
-async def get_airline_names() -> List[str]:
-    return airline_names
+# Load data from JSON
+with open('airlines.json', 'r') as file:
+    data = json.load(file)
+
+# Create Airline objects
+airlines = []
+for name, flights in data.items():
+    airline = Airline(name=name, flights=[Flight(**flight) for flight in flights])
+    airlines.append(airline)
+
+
+@app.get("/")
+def get_airlines() -> List[str]:
+    return [airline.name for airline in airlines]
 
 
 @app.get("/{airline_name}")
-async def get_flight_numbers(airline_name: str) -> List[str]:
-    for airline in airline_data:
-        if airline["name"] == airline_name:
-            return [flight["number"] for flight in airline["flights"]]
-    raise HTTPException(status_code=404, detail="Airline not found")
+def get_flights(airline_name: str) -> List[str]:
+    airline = next((airline for airline in airlines if airline.name == airline_name), None)
+    if airline:
+        return [flight.flight_num for flight in airline.flights]
+    else:
+        raise HTTPException(status_code=404, detail="Airline not found")
 
 
 @app.get("/{airline_name}/{flight_num}")
-async def get_flight(airline_name: str, flight_num: str) -> Flight:
-    for airline in airline_data:
-        if airline["name"] == airline_name:
-            for flight in airline["flights"]:
-                if flight["number"] == flight_num:
-                    return Flight(**flight)
-    raise HTTPException(status_code=404, detail="Flight not found")
+def get_flight(airline_name: str, flight_num: str) -> Flight:
+    airline = next((airline for airline in airlines if airline.name == airline_name), None)
+    if airline:
+        flight = next((flight for flight in airline.flights if flight.flight_num == flight_num), None)
+        if flight:
+            return flight
+        else:
+            raise HTTPException(status_code=404, detail="Flight not found")
+    else:
+        raise HTTPException(status_code=404, detail="Airline not found")
 
 
 @app.post("/{airline_name}")
-async def new_airline(airline: Airline) -> List[str]:
-    airline_names.append(airline.name)
-    airline_data.append(airline.dict())
-    return airline_names
+def create_flight(airline_name: str, flight: Flight):
+    airline = next((airline for airline in airlines if airline.name == airline_name), None)
+    if airline:
+        airline.flights.append(flight)
+        return {"message": "Flight created successfully"}
+    else:
+        raise HTTPException(status_code=404, detail="Airline not found")
 
 
-@app.put("/{airline}/{flight_num}")
-async def update_flight(airline: str, flight_num: str, flight_details: Dict) -> Flight:
-    for airline_data in airline_data:
-        if airline_data["name"] == airline:
-            for flight in airline_data["flights"]:
-                if flight["number"] == flight_num:
-                    flight.update(flight_details)
-                    return Flight(**flight)
-    raise HTTPException(status_code=404, detail="Flight not found")
+@app.put("/{airline_name}/{flight_num}")
+def update_flight(airline_name: str, flight_num: str, flight: Flight):
+    airline = next((airline for airline in airlines if airline.name == airline_name), None)
+    if airline:
+        existing_flight = next((f for f in airline.flights if f.flight_num == flight_num), None)
+        if existing_flight:
+            existing_flight.capacity = flight.capacity
+            existing_flight.estimated_flight_duration = flight.estimated_flight_duration
+            return {"message": "Flight updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Flight not found")
+    else:
+        raise HTTPException(status_code=404, detail="Airline not found")
 
 
-@app.delete("/{airline}/{flight_num}")
-async def delete_flight(airline: str, flight_num: str) -> List[Flight]:
-    for airline_data in airline_data:
-        if airline_data["name"] == airline:
-            for flight in airline_data["flights"]:
-                if flight["number"] == flight_num:
-                    airline_data["flights"].remove(flight)
-                    return airline_data["flights"]
-    raise HTTPException(status_code=404, detail="Flight not found")
+@app.delete("/{airline_name}/{flight_num}")
+def delete_flight(airline_name: str, flight_num: str):
+    airline = next((airline for airline in airlines if airline.name == airline_name), None)
+    if airline:
+        flight_to_delete = next((f for f in airline.flights if f.flight_num == flight_num), None)
+        if flight_to_delete:
+            airline.flights.remove(flight_to_delete)
+            return {"message": "Flight deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Flight not found")
+    else:
+        raise HTTPException(status_code=404, detail="Airline not found")
